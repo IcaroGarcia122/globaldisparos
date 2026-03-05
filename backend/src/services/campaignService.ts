@@ -1,10 +1,10 @@
 import { Campaign, Message, Contact, WhatsAppInstance, ContactList, ActivityLog } from '../models';
-import baileysService from './baileysService';
+import whatsappService from '../adapters/whatsapp.config';
 import antiBanService from './antiBanService';
 import logger from '../utils/logger';
 
 interface CampaignProgress {
-  campaignId: string;
+  campaignId: number;
   status: string;
   totalContacts: number;
   messagesSent: number;
@@ -15,15 +15,16 @@ interface CampaignProgress {
 }
 
 class CampaignService {
-  private runningCampaigns: Map<string, boolean> = new Map();
+  private runningCampaigns: Map<number, boolean> = new Map();
 
   /**
    * Cria uma nova campanha
    */
   public async createCampaign(data: {
     userId: string;
-    instanceId: string;
-    contactListId: string;
+    instanceId: number;
+    contactListId?: string;
+    groupId?: string;
     name: string;
     message: string;
     scheduledFor?: Date;
@@ -32,59 +33,90 @@ class CampaignService {
     useCommercialHours?: boolean;
   }): Promise<Campaign> {
     try {
-      // Obtém lista de contatos
-      const contactList = await ContactList.findByPk(data.contactListId, {
-        include: [{ model: Contact, as: 'contacts' }],
-      });
+      // Valida instância WhatsApp
+      const instance = await WhatsAppInstance.findByPk(data.instanceId);
+      if (!instance) {
+        throw new Error('Instância WhatsApp não encontrada');
+      }
 
-      if (!contactList) {
-        throw new Error('Lista de contatos não encontrada');
+      // Valida se instância está conectada
+      if (instance.status !== 'connected') {
+        throw new Error('Instância WhatsApp não está conectada. Conecte-a antes de criar campanhas.');
+      }
+
+      // Se for disparo em grupo, busca participantes do grupo
+      let contacts: any[] = [];
+      let totalContacts = 0;
+
+      if (data.groupId) {
+        // Busca participantes do grupo
+        const groupParticipants = await whatsappService.getGroupParticipants(data.instanceId, data.groupId);
+        contacts = groupParticipants || [];
+        totalContacts = contacts.length;
+        logger.info(`📨 Disparo para grupo: ${totalContacts} participantes encontrados`);
+      } else if (data.contactListId) {
+        // Obtém lista de contatos
+        const contactList = await ContactList.findByPk(data.contactListId, {
+          include: [{ model: Contact, as: 'contacts' }],
+        });
+
+        if (!contactList) {
+          throw new Error('Lista de contatos não encontrada');
+        }
+
+        contacts = (contactList as any).contacts || [];
+        totalContacts = contactList.totalContacts;
+      } else {
+        throw new Error('Grupo ou lista de contatos é obrigatório');
+      }
+
+      if (totalContacts === 0) {
+        throw new Error('Nenhum contato encontrado');
       }
 
       // Cria campanha
       const campaign = await Campaign.create({
-        userId: data.userId,
-        instanceId: data.instanceId,
-        contactListId: data.contactListId,
+        userId: Number(data.userId),
+        instanceId: Number(data.instanceId),
+        contactListId: data.contactListId ? Number(data.contactListId) : null,
         name: data.name,
         message: data.message,
         scheduledFor: data.scheduledFor || null,
-        totalContacts: contactList.totalContacts,
-        messagesScheduled: contactList.totalContacts,
+        totalContacts,
+        messagesScheduled: totalContacts,
         useAntibanVariations: data.useAntibanVariations ?? true,
         useAntibanDelays: data.useAntibanDelays ?? true,
         useCommercialHours: data.useCommercialHours ?? true,
       });
 
       // Cria mensagens agendadas
-      const contacts = await Contact.findAll({
-        where: { contactListId: data.contactListId },
-      });
-
-      const messages = contacts.map((contact) => ({
+      const messages = contacts.map((contact: any) => ({
         campaignId: campaign.id,
-        contactId: contact.id,
-        phoneNumber: contact.phoneNumber,
-        messageText: data.message, // Será processado no envio
+        contactId: contact.id || null,  // null para disparos em grupo
+        phoneNumber: contact.phoneNumber || (contact.jid?.split?.('@')[0] || null),
+        messageText: data.message,
         status: 'scheduled' as const,
-      }));
+      })).filter(m => m.phoneNumber); // Filtra contatos sem número
 
-      await Message.bulkCreate(messages);
+      if (messages.length > 0) {
+        await Message.bulkCreate(messages);
+      }
 
       // Log de atividade
       await ActivityLog.create({
-        userId: data.userId,
-        instanceId: data.instanceId,
+        userId: Number(data.userId),
+        instanceId: Number(data.instanceId),
         action: 'campaign_created',
         details: {
           campaignId: campaign.id,
           campaignName: data.name,
-          totalContacts: contactList.totalContacts,
+          totalContacts,
+          groupId: data.groupId,
         },
         level: 'success',
       });
 
-      logger.info(`✅ Campanha ${campaign.id} criada com ${contacts.length} contatos`);
+      logger.info(`✅ Campanha ${campaign.id} criada com ${totalContacts} contatos`);
 
       return campaign;
     } catch (error) {
@@ -96,7 +128,7 @@ class CampaignService {
   /**
    * Inicia uma campanha de disparo
    */
-  public async startCampaign(campaignId: string): Promise<void> {
+  public async startCampaign(campaignId: number): Promise<void> {
     try {
       const campaign = await Campaign.findByPk(campaignId, {
         include: [{ model: WhatsAppInstance, as: 'instance' }],
@@ -110,10 +142,21 @@ class CampaignService {
         throw new Error('Campanha não pode ser iniciada neste status');
       }
 
-      // Verifica se instância está conectada
-      if (!baileysService.isConnected(campaign.instanceId)) {
-        throw new Error('Instância WhatsApp não está conectada');
+      // Debug: log da instância
+      logger.info(`🔍 Verificando instância ${campaign.instanceId}...`);
+      
+      // Verifica se instância está conectada (em memória ou no banco)
+      logger.info(`⏳ Chamando isConnectedOrStored para instância ${campaign.instanceId}...`);
+      const isConnected = await whatsappService.isConnectedOrStored(campaign.instanceId);
+      
+      logger.info(`📊 Resultado da verificação: isConnected = ${isConnected}`);
+      
+      if (!isConnected) {
+        logger.error(`❌ Instância ${campaign.instanceId} não está conectada`);
+        throw new Error('Instância WhatsApp não está conectada. Por favor, escaneie o QR code primeiro.');
       }
+
+      logger.info(`✅ Instância ${campaign.instanceId} está conectada - iniciando campanha...`);
 
       // Atualiza status
       await campaign.update({
@@ -138,9 +181,12 @@ class CampaignService {
 
       logger.info(`🚀 Campanha ${campaignId} iniciada`);
 
-      // Inicia processo de envio em background
-      this.processCampaign(campaignId).catch((error) => {
-        logger.error(`Erro ao processar campanha ${campaignId}:`, error);
+      // Inicia processo de envio EM BACKGROUND (não bloqueia)
+      setImmediate(() => {
+        this.processCampaign(campaignId).catch((error) => {
+          logger.error(`❌ Erro ao processar campanha ${campaignId}:`, error);
+          campaign.update({ status: 'completed' }).catch(err => logger.error('Erro ao atualizar status:', err));
+        });
       });
     } catch (error) {
       logger.error('Erro ao iniciar campanha:', error);
@@ -151,13 +197,20 @@ class CampaignService {
   /**
    * Processa uma campanha (envio das mensagens)
    */
-  private async processCampaign(campaignId: string): Promise<void> {
+  private async processCampaign(campaignId: number): Promise<void> {
+    logger.info(`📨 ===== INICIANDO PROCESSAMENTO DA CAMPANHA ${campaignId} =====`);
+    
     try {
       const campaign = await Campaign.findByPk(campaignId, {
         include: [{ model: WhatsAppInstance, as: 'instance' }],
       });
 
-      if (!campaign) return;
+      if (!campaign) {
+        logger.error(`❌ Campanha não encontrada: ${campaignId}`);
+        return;
+      }
+
+      logger.info(`📨 Campanha encontrada: ${campaign.name}`);
 
       // Obtém mensagens pendentes
       const messages = await Message.findAll({
@@ -165,17 +218,42 @@ class CampaignService {
           campaignId,
           status: 'scheduled',
         },
-        include: [{ model: Contact, as: 'contact' }],
         order: [['createdAt', 'ASC']],
       });
 
-      logger.info(`📨 Processando ${messages.length} mensagens da campanha ${campaignId}`);
+      logger.info(`📨 ✅ ${messages.length} mensagens encontradas para enviar`);
+      
+      if (messages.length === 0) {
+        logger.warn(`⚠️ Nenhuma mensagem para enviar na campanha ${campaignId}`);
+        await campaign.update({ status: 'completed' });
+        return;
+      }
 
-      const instance = campaign.instance!;
+      const instance = (campaign as any).instance! as WhatsAppInstance;
+      
+      logger.info(`🔗 Instância: ${instance.name} (ID: ${instance.id}, Status: ${instance.status})`);
+      
+      // Verifica se está conectada (com reconexão automática se marcada como conectada)
+      const isConnected = await whatsappService.isConnectedOrStored(instance.id);
+      
+      if (!isConnected) {
+        logger.error(`❌ Instância não está conectada e não foi possível reconectar. Status: ${instance.status}`);
+        await campaign.update({ status: 'completed' });
+        return;
+      }
+      
+      logger.info(`✅ Instância validada para disparo`);
+      
       const limits = antiBanService.getLimitsByAccountAge(instance.accountAge);
       let messageCount = 0;
+      let failureCount = 0;
       let burstCount = 0;
       const burstLimit = antiBanService.generateBurstLimit();
+
+      logger.info(`⏱️ Limites antiban: ${limits.dailyLimit} msg/dia`);
+      
+      // Delay padrão entre mensagens (antiban)
+      const delayBetweenMessages = 500; // 500ms entre mensagens
 
       for (const message of messages) {
         // Verifica se campanha ainda está rodando
@@ -228,27 +306,18 @@ class CampaignService {
           break;
         }
 
-        // Prepara mensagem com variáveis e variações
-        const contact = message.contact!;
-        const finalMessage = antiBanService.prepareMessageForSending(
-          campaign.message,
-          contact.variables,
-          {
-            useVariations: campaign.useAntibanVariations,
-            useDelays: campaign.useAntibanDelays,
-            useCommercialHours: campaign.useCommercialHours,
-            useBurstControl: true,
-          }
-        );
+        // Prepara mensagem
+        const finalMessage = campaign.message;
 
         try {
+          logger.info(`📤 Enviando para ${message.phoneNumber}...`);
+          
           // Envia mensagem
-          await baileysService.sendMessage(instance.id, message.phoneNumber, finalMessage);
+          await whatsappService.sendMessage(instance.id, message.phoneNumber, finalMessage);
 
           // Atualiza mensagem
           await message.update({
             status: 'sent',
-            messageText: finalMessage,
             sentAt: new Date(),
           });
 
@@ -285,7 +354,7 @@ class CampaignService {
 
         // Delay entre mensagens
         if (campaign.useAntibanDelays && messageCount < messages.length) {
-          const delay = antiBanService.generateDelay(limits.delayMin, limits.delayMax) * 1000;
+          const delay = delayBetweenMessages;
           logger.debug(`⏳ Aguardando ${delay / 1000}s antes da próxima mensagem`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -338,7 +407,7 @@ class CampaignService {
   /**
    * Pausa uma campanha
    */
-  public async pauseCampaign(campaignId: string): Promise<void> {
+  public async pauseCampaign(campaignId: number): Promise<void> {
     try {
       this.runningCampaigns.set(campaignId, false);
       
@@ -365,7 +434,7 @@ class CampaignService {
   /**
    * Cancela uma campanha
    */
-  public async cancelCampaign(campaignId: string): Promise<void> {
+  public async cancelCampaign(campaignId: number): Promise<void> {
     try {
       this.runningCampaigns.delete(campaignId);
       
@@ -392,7 +461,7 @@ class CampaignService {
   /**
    * Obtém progresso de uma campanha
    */
-  public async getCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
+  public async getCampaignProgress(campaignId: number): Promise<CampaignProgress | null> {
     try {
       const campaign = await Campaign.findByPk(campaignId);
       if (!campaign) return null;
@@ -409,6 +478,152 @@ class CampaignService {
     } catch (error) {
       logger.error('Erro ao obter progresso da campanha:', error);
       return null;
+    }
+  }
+
+  /**
+   * Calcula métricas detalhadas de uma campanha para o dashboard
+   */
+  public async getCampaignMetrics(campaignId: number): Promise<any> {
+    try {
+      const campaign = await Campaign.findByPk(campaignId);
+      if (!campaign) {
+        throw new Error('Campanha não encontrada');
+      }
+
+      // Busca todas as mensagens
+      const messages = await Message.findAll({
+        where: { campaignId }
+      });
+
+      // Calcula métricas
+      const total = messages.length;
+      const pending = messages.filter(m => m.status === 'scheduled').length;
+      const sent = messages.filter(m => m.status === 'sent' || m.status === 'delivered' || m.status === 'read' || m.status === 'failed').length;
+      const delivered = messages.filter(m => m.status === 'delivered' || m.status === 'read').length;
+      const read = messages.filter(m => m.status === 'read').length;
+      const error = messages.filter(m => m.status === 'failed').length;
+
+      // Calcula taxa de sucesso
+      const successRate = total > 0 ? ((sent - error) / total) * 100 : 0;
+
+      // Calcula velocidade (mensagens por minuto)
+      let currentSpeed = 0;
+      if (campaign.startedAt) {
+        const elapsedMilliseconds = Date.now() - new Date(campaign.startedAt).getTime();
+        const elapsedMinutes = elapsedMilliseconds / (1000 * 60);
+        currentSpeed = elapsedMinutes > 0 ? Math.round((sent / elapsedMinutes) * 100) / 100 : 0;
+      }
+
+      // Calcula tempo restante estimado
+      let estimatedTimeRemaining = 0;
+      if (currentSpeed > 0 && pending > 0) {
+        estimatedTimeRemaining = Math.round((pending / currentSpeed) * 60);
+      }
+
+      // Calcula tempo decorrido
+      let elapsedTime = 0;
+      if (campaign.startedAt) {
+        const elapsedMilliseconds = Date.now() - new Date(campaign.startedAt).getTime();
+        elapsedTime = Math.round(elapsedMilliseconds / 1000);
+      }
+
+      return {
+        total,
+        sent,
+        delivered,
+        read,
+        error,
+        pending,
+        successRate: Math.round(successRate * 100) / 100,
+        currentSpeed: currentSpeed || campaign.messageSpeed || 0,
+        estimatedTimeRemaining,
+        elapsedTime,
+        status: campaign.status,
+        totalContacts: campaign.totalContacts,
+        messagesSent: campaign.messagesSent,
+        messagesFailed: campaign.messagesFailed,
+        startedAt: campaign.startedAt,
+        completedAt: campaign.completedAt,
+      };
+    } catch (error) {
+      logger.error('Erro ao calcular métricas da campanha:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obém timeline de envios da campanha agregada por minuto
+   */
+  public async getCampaignTimeline(campaignId: number): Promise<any[]> {
+    try {
+      const campaign = await Campaign.findByPk(campaignId);
+      if (!campaign) {
+        throw new Error('Campanha não encontrada');
+      }
+
+      // Busca todas as mensagens com timestamps
+      const messages = await Message.findAll({
+        where: { campaignId },
+        order: [['sentAt', 'ASC']]
+      });
+
+      // Agrupa mensagens por minuto
+      const timelineMap = new Map<string, any>();
+
+      messages.forEach(msg => {
+        // Usa o timestamp de envio ou criação
+        const timestamp = msg.sentAt || msg.createdAt;
+        if (!timestamp) return;
+
+        // Agrupa por minuto (arredonda para o minuto anterior)
+        const date = new Date(timestamp);
+        date.setSeconds(0, 0);
+        const key = date.toISOString();
+
+        if (!timelineMap.has(key)) {
+          timelineMap.set(key, {
+            time: key,
+            sent: 0,
+            delivered: 0,
+            read: 0,
+            error: 0,
+            pending: 0,
+          });
+        }
+
+        const record = timelineMap.get(key);
+        if (msg.status === 'sent') {
+          record.sent++;
+        } else if (msg.status === 'delivered') {
+          record.delivered++;
+        } else if (msg.status === 'read') {
+          record.read++;
+        } else if (msg.status === 'failed') {
+          record.error++;
+        } else if (msg.status === 'scheduled') {
+          record.pending++;
+        }
+      });
+
+      // Converte map para array ordenado
+      const timeline = Array.from(timelineMap.values())
+        .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+        .map(item => ({
+          ...item,
+          // Formata o tempo para exibição
+          timeLabel: new Date(item.time).toLocaleTimeString('pt-BR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          // Calcula cumulativo
+          totalSent: item.sent + item.delivered + item.read,
+        }));
+
+      return timeline;
+    } catch (error) {
+      logger.error('Erro ao gerar timeline da campanha:', error);
+      return [];
     }
   }
 }

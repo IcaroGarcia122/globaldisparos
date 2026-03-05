@@ -2,10 +2,10 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface CampaignAttributes {
-  id: string;
-  userId: string;
-  instanceId: string;
-  contactListId: string;
+  id: number;
+  userId: number;
+  instanceId: number;
+  contactListId: number | null;
   name: string;
   message: string;
   status: 'pending' | 'running' | 'paused' | 'completed' | 'cancelled' | 'banned';
@@ -16,6 +16,8 @@ interface CampaignAttributes {
   messagesSent: number;
   messagesFailed: number;
   messagesScheduled: number;
+  messageSpeed: number; // msgs/min
+  messageInterval: number; // seconds between messages
   useAntibanVariations: boolean;
   useAntibanDelays: boolean;
   useCommercialHours: boolean;
@@ -35,16 +37,19 @@ interface CampaignCreationAttributes
     | 'messagesSent'
     | 'messagesFailed'
     | 'messagesScheduled'
+    | 'messageSpeed'
+    | 'messageInterval'
     | 'useAntibanVariations'
     | 'useAntibanDelays'
     | 'useCommercialHours'
+    | 'contactListId'
   > {}
 
 class Campaign extends Model<CampaignAttributes, CampaignCreationAttributes> implements CampaignAttributes {
-  public id!: string;
-  public userId!: string;
-  public instanceId!: string;
-  public contactListId!: string;
+  public id!: number;
+  public userId!: number;
+  public instanceId!: number;
+  public contactListId!: number | null;
   public name!: string;
   public message!: string;
   public status!: 'pending' | 'running' | 'paused' | 'completed' | 'cancelled' | 'banned';
@@ -55,6 +60,8 @@ class Campaign extends Model<CampaignAttributes, CampaignCreationAttributes> imp
   public messagesSent!: number;
   public messagesFailed!: number;
   public messagesScheduled!: number;
+  public messageSpeed!: number;
+  public messageInterval!: number;
   public useAntibanVariations!: boolean;
   public useAntibanDelays!: boolean;
   public useCommercialHours!: boolean;
@@ -73,12 +80,12 @@ class Campaign extends Model<CampaignAttributes, CampaignCreationAttributes> imp
 Campaign.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     userId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'users',
@@ -87,7 +94,7 @@ Campaign.init(
       onDelete: 'CASCADE',
     },
     instanceId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'whatsapp_instances',
@@ -96,8 +103,8 @@ Campaign.init(
       onDelete: 'CASCADE',
     },
     contactListId: {
-      type: DataTypes.UUID,
-      allowNull: false,
+      type: DataTypes.INTEGER,
+      allowNull: true,
       references: {
         model: 'contact_lists',
         key: 'id',
@@ -147,6 +154,16 @@ Campaign.init(
     messagesScheduled: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
+      allowNull: false,
+    },
+    messageSpeed: {
+      type: DataTypes.INTEGER,
+      defaultValue: 10, // 10 msgs/min by default
+      allowNull: false,
+    },
+    messageInterval: {
+      type: DataTypes.FLOAT,
+      defaultValue: 6, // 60/10 = 6 seconds
       allowNull: false,
     },
     useAntibanVariations: {

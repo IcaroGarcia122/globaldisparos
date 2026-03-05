@@ -45,7 +45,13 @@ const CreateInstance: React.FC<CreateInstanceProps> = ({ onSuccess }) => {
       }
     } catch (error: any) {
       console.error('Erro ao criar instância:', error);
-      setError(error.message || 'Erro ao criar instância. Tente novamente.');
+      
+      // Melhorar mensagem de erro para limite de instâncias
+      if (error.message && error.message.includes('Máximo')) {
+        setError('Você atingiu o limite de instâncias ativas. Delete uma instância para adicionar uma nova.');
+      } else {
+        setError(error.message || 'Erro ao criar instância. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }

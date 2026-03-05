@@ -3,7 +3,7 @@ import sequelize from '../config/database';
 import bcrypt from 'bcryptjs';
 
 interface UserAttributes {
-  id: string;
+  id: number;
   email: string;
   password: string;
   fullName: string;
@@ -20,7 +20,7 @@ interface UserAttributes {
 interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'role' | 'plan' | 'isActive' | 'planExpiresAt' | 'diggionCustomerId' | 'lastLoginAt'> {}
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: string;
+  public id!: number;
   public email!: string;
   public password!: string;
   public fullName!: string;
@@ -48,8 +48,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
 User.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     email: {

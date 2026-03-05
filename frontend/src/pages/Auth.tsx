@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, ArrowLeft, Eye, EyeOff, Shield, Crown } from 'lucide-react';
 import { fetchAPI } from '@/config/api';
 
 const Auth: React.FC = () => {
@@ -9,6 +9,7 @@ const Auth: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPanelSelector, setShowPanelSelector] = useState(false);
   const navigate = useNavigate();
 
   // Se já está autenticado com token válido, redireciona
@@ -19,8 +20,14 @@ const Auth: React.FC = () => {
     if (token && user) {
       try {
         const userData = JSON.parse(user);
+        // Se é admin@gmail.com e role é admin, mostrar seletor
+        if (userData.email === 'admin@gmail.com' && userData.role === 'admin') {
+          setShowPanelSelector(true);
+          return;
+        }
+        // Caso contrário, navegar baseado no role
         if (userData.role === 'admin') {
-          navigate('/painel-selector');
+          navigate('/admin');
         } else {
           navigate('/dashboard');
         }
@@ -48,11 +55,16 @@ const Auth: React.FC = () => {
       localStorage.setItem('token', backendData.token);
       localStorage.setItem('user', JSON.stringify(backendData.user));
 
-      // Redirecionar baseado no role
-      if (backendData.user.role === 'admin') {
-        navigate('/painel-selector');
+      // SE é admin@gmail.com E role === admin: mostrar seletor
+      if (backendData.user.email === 'admin@gmail.com' && backendData.user.role === 'admin') {
+        setShowPanelSelector(true);
       } else {
-        navigate('/dashboard');
+        // Redirecionar baseado no role
+        if (backendData.user.role === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (err: any) {
       setError('E-mail ou senha inválidos.');
@@ -61,6 +73,80 @@ const Auth: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // SE showPanelSelector, renderizar o seletor
+  if (showPanelSelector) {
+    const user = localStorage.getItem('user');
+    const userData = user ? JSON.parse(user) : null;
+
+    return (
+      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-brand-600/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="w-full max-w-lg relative z-10">
+          <div className="bg-[#1c2433] border border-white/5 p-10 rounded-[2.5rem]">
+            <h1 className="text-2xl font-black text-white text-center mb-2 uppercase italic tracking-tighter">
+              Selecione o Painel
+            </h1>
+            <p className="text-slate-500 text-sm text-center mb-10">
+              Escolha qual painel você deseja acessar
+            </p>
+
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              {/* Admin Button */}
+              <button
+                onClick={() => navigate('/admin')}
+                className="group relative overflow-hidden rounded-2xl border border-brand-500/30 bg-gradient-to-br from-brand-950 to-slate-950 p-6 transition-all duration-300 hover:border-brand-400 hover:shadow-lg hover:shadow-brand-500/20 active:scale-95"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                <div className="relative z-10 flex flex-col items-center">
+                  <Shield size={32} className="text-brand-400 mb-3" />
+                  <h3 className="text-white font-black text-sm uppercase tracking-wider">
+                    Painel Admin
+                  </h3>
+                  <p className="text-slate-600 text-xs mt-2 text-center">
+                    Gerenciar sistema
+                  </p>
+                </div>
+              </button>
+
+              {/* VIP Button */}
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="group relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950 to-slate-950 p-6 transition-all duration-300 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-500/20 active:scale-95"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                <div className="relative z-10 flex flex-col items-center">
+                  <Crown size={32} className="text-emerald-400 mb-3" />
+                  <h3 className="text-white font-black text-sm uppercase tracking-wider">
+                    Painel VIP
+                  </h3>
+                  <p className="text-slate-600 text-xs mt-2 text-center">
+                    Disparos WhatsApp
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Logout Button */}
+            <button
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setShowPanelSelector(false);
+                setEmail('');
+                setPassword('');
+              }}
+              className="w-full text-slate-600 hover:text-slate-400 text-xs font-black uppercase tracking-widest transition-colors py-2"
+            >
+              Não é você? Fazer logout
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-4 relative overflow-hidden">

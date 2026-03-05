@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { fetchAPI } from '@/config/api';
 import { Send, Loader2, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
+import CampaignMonitoring from './CampaignMonitoring';
 
 interface Campaign {
   id: string;
   name: string;
   instanceId: number;
   message: string;
-  status: 'draft' | 'scheduled' | 'sending' | 'completed' | 'failed';
+  status: 'draft' | 'scheduled' | 'sending' | 'completed' | 'failed' | 'running' | 'paused' | 'cancelled';
   sentCount: number;
   failedCount: number;
   totalCount: number;
@@ -19,11 +20,14 @@ const CampaignDispatcher: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [instances, setInstances] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
     instanceId: '',
+    groupId: '',
     message: '',
     contactList: null as any,
   });
@@ -35,10 +39,22 @@ const CampaignDispatcher: React.FC = () => {
 
   const loadInstances = async () => {
     try {
-      const data = await fetchAPI('/instances');
-      setInstances(data);
+      const response = await fetchAPI('/instances');
+      // API retorna {data: [...], pagination: {...}} ou {instances: [...], pagination: {...}}
+      const data = response?.data || response?.instances || response || [];
+      setInstances(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Erro ao carregar instâncias:', err);
+    }
+  };
+
+  const loadGroups = async (instanceId: string) => {
+    try {
+      const data = await fetchAPI(`/groups?instanceId=${instanceId}`);
+      setGroups(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar grupos:', err);
+      setGroups([]);
     }
   };
 
@@ -63,18 +79,34 @@ const CampaignDispatcher: React.FC = () => {
         return;
       }
 
+      if (!formData.groupId) {
+        setError('Selecione um grupo de destino');
+        setLoading(false);
+        return;
+      }
+
+      // Cria a campanha com grupo
       const newCampaign = await fetchAPI('/campaigns', {
         method: 'POST',
         body: {
           name: formData.name,
           instanceId: parseInt(formData.instanceId),
+          groupId: formData.groupId,
           message: formData.message,
         },
       });
 
+      // Inicia a campanha
+      await fetchAPI(`/campaigns/${newCampaign.id}/start`, {
+        method: 'POST',
+      });
+
       setCampaigns([...campaigns, newCampaign]);
-      setFormData({ name: '', instanceId: '', message: '', contactList: null });
+      setFormData({ name: '', instanceId: '', message: '', contactList: null, groupId: '' });
       setShowForm(false);
+      
+      // Mostra o dashboard de monitoramento
+      setActiveCampaignId(newCampaign.id);
     } catch (err: any) {
       setError(err.message || 'Erro ao criar campanha');
     } finally {
@@ -97,6 +129,14 @@ const CampaignDispatcher: React.FC = () => {
 
   return (
     <div className="animate-fade-in space-y-8">
+      {/* Dashboard de Monitoramento */}
+      {activeCampaignId && (
+        <CampaignMonitoring 
+          campaignId={activeCampaignId}
+          onClose={() => setActiveCampaignId(null)}
+        />
+      )}
+
       <header className="dashboard-card">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
@@ -147,7 +187,12 @@ const CampaignDispatcher: React.FC = () => {
                 </label>
                 <select
                   value={formData.instanceId}
-                  onChange={(e) => setFormData({ ...formData, instanceId: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, instanceId: e.target.value, groupId: '' });
+                    if (e.target.value) {
+                      loadGroups(e.target.value);
+                    }
+                  }}
                   className="w-full bg-[#060b16] border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-brand-500 transition-all appearance-none cursor-pointer"
                   required
                 >
@@ -159,6 +204,31 @@ const CampaignDispatcher: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {formData.instanceId && (
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                    Grupo de Destino
+                  </label>
+                  <select
+                    value={formData.groupId}
+                    onChange={(e) => setFormData({ ...formData, groupId: e.target.value })}
+                    className="w-full bg-[#060b16] border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-brand-500 transition-all appearance-none cursor-pointer"
+                    required
+                  >
+                    <option value="">Selecionar grupo</option>
+                    {groups.length > 0 ? (
+                      groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name} ({group.participantCount || 0} membros)
+                        </option>
+                      ))
+                    ) : (
+                      <option disabled>Nenhum grupo encontrado</option>
+                    )}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div>

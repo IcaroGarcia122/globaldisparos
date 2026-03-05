@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface PaymentAttributes {
-  id: string;
-  userId: string;
+  id: number;
+  userId: number;
   diggionTransactionId: string;
   amount: number;
   currency: string;
@@ -19,8 +19,8 @@ interface PaymentAttributes {
 interface PaymentCreationAttributes extends Optional<PaymentAttributes, 'id' | 'currency' | 'metadata'> {}
 
 class Payment extends Model<PaymentAttributes, PaymentCreationAttributes> implements PaymentAttributes {
-  public id!: string;
-  public userId!: string;
+  public id!: number;
+  public userId!: number;
   public diggionTransactionId!: string;
   public amount!: number;
   public currency!: string;
@@ -37,12 +37,12 @@ class Payment extends Model<PaymentAttributes, PaymentCreationAttributes> implem
 Payment.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     userId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'users',

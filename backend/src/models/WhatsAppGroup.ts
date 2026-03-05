@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface WhatsAppGroupAttributes {
-  id: string;
-  instanceId: string;
+  id: number;
+  instanceId: number;
   groupId: string; // ID do grupo no WhatsApp
   name: string;
   participantsCount: number;
@@ -15,8 +15,8 @@ interface WhatsAppGroupAttributes {
 interface WhatsAppGroupCreationAttributes extends Optional<WhatsAppGroupAttributes, 'id' | 'participantsCount' | 'extractedAt'> {}
 
 class WhatsAppGroup extends Model<WhatsAppGroupAttributes, WhatsAppGroupCreationAttributes> implements WhatsAppGroupAttributes {
-  public id!: string;
-  public instanceId!: string;
+  public id!: number;
+  public instanceId!: number;
   public groupId!: string;
   public name!: string;
   public participantsCount!: number;
@@ -29,12 +29,12 @@ class WhatsAppGroup extends Model<WhatsAppGroupAttributes, WhatsAppGroupCreation
 WhatsAppGroup.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     instanceId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'whatsapp_instances',

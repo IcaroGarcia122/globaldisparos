@@ -1,0 +1,119 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🚀 Iniciar Evolution API",
+      "type": "shell",
+      "command": "docker-compose up -d",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "⏹️ Parar Evolution API",
+      "type": "shell",
+      "command": "docker-compose down",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔄 Reiniciar Evolution API",
+      "type": "shell",
+      "command": "docker-compose restart evolution-api",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📋 Ver Logs Evolution",
+      "type": "shell",
+      "command": "docker-compose logs -f evolution-api",
+      "isBackground": true,
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📋 Ver Logs Todos Serviços",
+      "type": "shell",
+      "command": "docker-compose logs -f",
+      "isBackground": true,
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📊 Status dos Containers",
+      "type": "shell",
+      "command": "docker-compose ps",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🧹 Limpar Tudo (CUIDADO!)",
+      "type": "shell",
+      "command": "docker-compose down -v && docker system prune -f",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📦 Backup do Banco",
+      "type": "shell",
+      "command": "./scripts/backup.sh",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔧 Atualizar Imagens",
+      "type": "shell",
+      "command": "docker-compose pull && docker-compose up -d",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

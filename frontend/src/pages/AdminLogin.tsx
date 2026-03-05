@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { Lock, Mail, ArrowLeft } from 'lucide-react';
+import { fetchAPI } from '@/config/api';
 
 const AdminLogin: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -15,29 +15,50 @@ const AdminLogin: React.FC = () => {
     setLoading(true);
     setError('');
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      console.log('🔐 [AdminLogin] Tentando login com:', { email, password: '***' });
+      
+      // Fazer login usando fetchAPI (que usa o proxy do Vite)
+      const backendData = await fetchAPI('/auth/login', {
+        method: 'POST',
+        body: { email, password }
+      });
 
-    if (authError) {
-      setError('Credenciais inválidas.');
+      console.log('✅ [AdminLogin] Resposta do backend:', { 
+        token: backendData.token?.substring(0, 20) + '...', 
+        user: backendData.user 
+      });
+
+      // Verificar se é admin
+      if (backendData.user.role !== 'admin') {
+        console.log('⚠️ [AdminLogin] Usuário não é admin, role:', backendData.user.role);
+        setError('Acesso negado. Você não é administrador.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🛡️ [AdminLogin] Usuário é admin, salvando dados...');
+
+      // Salvar token e dados
+      localStorage.setItem('token', backendData.token);
+      localStorage.setItem('user', JSON.stringify(backendData.user));
+
+      console.log('🚀 [AdminLogin] Redirecionando para painel-selector...');
+
+      // Redirecionar para painel admin
+      navigate('/painel-selector');
+    } catch (err: any) {
+      console.error('❌ [AdminLogin] Erro COMPLETO:', err);
+      console.error('❌ [AdminLogin] Erro message:', err.message);
+      console.error('❌ [AdminLogin] Erro stack:', err.stack);
+      
+      // Mostrar erro mais detalhado
+      const errorMsg = err.message || 'E-mail ou senha inválidos.';
+      console.error('🔴 Renderizando erro:', errorMsg);
+      setError(errorMsg);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Check if user is admin
-    const { data: roles, error: roleError } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', data.user.id)
-      .eq('role', 'admin');
-
-    if (roleError || !roles || roles.length === 0) {
-      await supabase.auth.signOut();
-      setError('Acesso negado. Você não é administrador.');
-      setLoading(false);
-      return;
-    }
-
-    navigate('/admin');
   };
 
   return (

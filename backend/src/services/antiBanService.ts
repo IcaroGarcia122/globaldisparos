@@ -48,7 +48,7 @@ class AntiBanService {
   /**
    * Verifica se a instância atingiu o limite diário
    */
-  public async hasReachedDailyLimit(instanceId: string): Promise<boolean> {
+  public async hasReachedDailyLimit(instanceId: number): Promise<boolean> {
     try {
       const instance = await WhatsAppInstance.findByPk(instanceId);
       if (!instance) return true;
@@ -183,7 +183,7 @@ class AntiBanService {
   /**
    * Verifica se a instância está possivelmente banida (taxa de erro > 70%)
    */
-  public async detectPossibleBan(instanceId: string): Promise<boolean> {
+  public async detectPossibleBan(instanceId: number): Promise<boolean> {
     try {
       const instance = await WhatsAppInstance.findByPk(instanceId);
       if (!instance) return false;

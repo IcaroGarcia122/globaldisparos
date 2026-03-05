@@ -168,7 +168,7 @@ const HelpCenterTab: React.FC<HelpCenterTabProps> = ({ onNavigate }) => {
     }))
     .filter(cat => cat.items.length > 0);
 
-  const whatsappLink = 'https://wa.me/5511999999999?text=Olá! Preciso de ajuda com o Global Disparos.';
+  const whatsappLink = 'https://wa.me/5542999538607?text=Olá! Preciso de ajuda com o Global Disparos.';
 
   const activeDetail = categoryDetails.find(c => c.label === openCategory);
 

@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface ContactListAttributes {
-  id: string;
-  userId: string;
+  id: number;
+  userId: number;
   name: string;
   description: string | null;
   totalContacts: number;
@@ -14,8 +14,8 @@ interface ContactListAttributes {
 interface ContactListCreationAttributes extends Optional<ContactListAttributes, 'id' | 'description' | 'totalContacts'> {}
 
 class ContactList extends Model<ContactListAttributes, ContactListCreationAttributes> implements ContactListAttributes {
-  public id!: string;
-  public userId!: string;
+  public id!: number;
+  public userId!: number;
   public name!: string;
   public description!: string | null;
   public totalContacts!: number;
@@ -27,12 +27,12 @@ class ContactList extends Model<ContactListAttributes, ContactListCreationAttrib
 ContactList.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     userId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'users',

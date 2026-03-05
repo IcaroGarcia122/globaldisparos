@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  evolution-api:
+    container_name: evolution_api_fresh
+    image: atendai/evolution-api:v1.7.4
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_TYPE=http
+      - SERVER_PORT=8080
+      - SERVER_URL=http://localhost:8080
+      - CORS_ORIGIN=*
+      - CORS_METHODS=GET,POST,PUT,DELETE,PATCH,OPTIONS
+      - CORS_CREDENTIALS=true
+      - LOG_LEVEL=info
+      - LOG_COLOR=false
+      - LOG_BAILEYS=error
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=myfKey123456789
+      - GLOBAL_API_KEY=myfKey123456789
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      - AUTHENTICATION_INSTANCE_FALLBACK=true
+      - INTEGRATION=WHATSAPP-BAILEYS
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://postgres:postgres@postgres:5432/evolution
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_fresh
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/0
+      - CACHE_REDIS_PREFIX_KEY=evolution_fresh
+      - CACHE_REDIS_SAVE_INSTANCES=true
+      - STORE_MESSAGES=true
+      - STORE_CONTACTS=true
+      - STORE_CHATS=true
+      - CLEAN_STORE_CLEANING_INTERVAL=7200
+      - CLEAN_STORE_MESSAGES=true
+      - CLEAN_STORE_MESSAGE_UP_TO=7
+      - CLEAN_STORE_CONTACTS=true
+      - CLEAN_STORE_CHATS=true
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#25D366
+      - CONFIG_SESSION_PHONE_CLIENT=Evolution Fresh
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - WEBHOOK_GLOBAL_ENABLED=false
+    volumes:
+      - evolution_fresh_instances:/evolution/instances
+      - evolution_fresh_store:/evolution/store
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - evolution_fresh_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    container_name: postgres_fresh
+    image: postgres:15-alpine
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=evolution
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_fresh_data:/var/lib/postgresql/data
+    networks:
+      - evolution_fresh_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: redis_fresh
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_fresh_data:/data
+    networks:
+      - evolution_fresh_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  evolution_fresh_instances:
+  evolution_fresh_store:
+  postgres_fresh_data:
+  redis_fresh_data:
+
+networks:
+  evolution_fresh_network:
+    driver: bridge

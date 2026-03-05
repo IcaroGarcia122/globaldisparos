@@ -2,9 +2,9 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface MessageAttributes {
-  id: string;
-  campaignId: string;
-  contactId: string;
+  id: number;
+  campaignId: number;
+  contactId: number | null;
   phoneNumber: string;
   messageText: string;
   status: 'scheduled' | 'sent' | 'failed' | 'delivered' | 'read';
@@ -17,12 +17,12 @@ interface MessageAttributes {
 }
 
 interface MessageCreationAttributes
-  extends Optional<MessageAttributes, 'id' | 'status' | 'errorMessage' | 'sentAt' | 'deliveredAt' | 'readAt'> {}
+  extends Optional<MessageAttributes, 'id' | 'contactId' | 'status' | 'errorMessage' | 'sentAt' | 'deliveredAt' | 'readAt'> {}
 
 class Message extends Model<MessageAttributes, MessageCreationAttributes> implements MessageAttributes {
-  public id!: string;
-  public campaignId!: string;
-  public contactId!: string;
+  public id!: number;
+  public campaignId!: number;
+  public contactId!: number | null;
   public phoneNumber!: string;
   public messageText!: string;
   public status!: 'scheduled' | 'sent' | 'failed' | 'delivered' | 'read';
@@ -38,12 +38,12 @@ class Message extends Model<MessageAttributes, MessageCreationAttributes> implem
 Message.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     campaignId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'campaigns',
@@ -52,8 +52,8 @@ Message.init(
       onDelete: 'CASCADE',
     },
     contactId: {
-      type: DataTypes.UUID,
-      allowNull: false,
+      type: DataTypes.INTEGER,
+      allowNull: true,
       references: {
         model: 'contacts',
         key: 'id',

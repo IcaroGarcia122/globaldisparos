@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface GroupParticipantAttributes {
-  id: string;
-  groupId: string;
+  id: number;
+  groupId: number;
   phoneNumber: string;
   name: string | null;
   isAdmin: boolean;
@@ -14,8 +14,8 @@ interface GroupParticipantAttributes {
 interface GroupParticipantCreationAttributes extends Optional<GroupParticipantAttributes, 'id' | 'name' | 'isAdmin'> {}
 
 class GroupParticipant extends Model<GroupParticipantAttributes, GroupParticipantCreationAttributes> implements GroupParticipantAttributes {
-  public id!: string;
-  public groupId!: string;
+  public id!: number;
+  public groupId!: number;
   public phoneNumber!: string;
   public name!: string | null;
   public isAdmin!: boolean;
@@ -27,12 +27,12 @@ class GroupParticipant extends Model<GroupParticipantAttributes, GroupParticipan
 GroupParticipant.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     groupId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'whatsapp_groups',

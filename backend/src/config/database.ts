@@ -35,7 +35,11 @@ export const testConnection = async (): Promise<void> => {
 
 export const syncDatabase = async (force: boolean = false): Promise<void> => {
   try {
-    await sequelize.sync({ force, alter: !force && config.env === 'development' });
+    // Add 30 second timeout to prevent hanging on complex migrations
+    await Promise.race([
+      sequelize.sync({ force, alter: !force && config.env === 'development' }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database sync timeout')), 30000))
+    ]);
     logger.info(`✅ Banco de dados sincronizado ${force ? '(FORCE)' : ''}!`);
   } catch (error) {
     logger.error('❌ Erro ao sincronizar banco de dados:', error);

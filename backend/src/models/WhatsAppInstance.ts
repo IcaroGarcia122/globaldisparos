@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface WhatsAppInstanceAttributes {
-  id: string;
-  userId: string;
+  id: number;
+  userId: number;
   name: string;
   phoneNumber: string | null;
   status: 'disconnected' | 'connecting' | 'connected' | 'banned';
@@ -26,8 +26,8 @@ interface WhatsAppInstanceCreationAttributes
   > {}
 
 class WhatsAppInstance extends Model<WhatsAppInstanceAttributes, WhatsAppInstanceCreationAttributes> implements WhatsAppInstanceAttributes {
-  public id!: string;
-  public userId!: string;
+  public id!: number;
+  public userId!: number;
   public name!: string;
   public phoneNumber!: string | null;
   public status!: 'disconnected' | 'connecting' | 'connected' | 'banned';
@@ -61,12 +61,12 @@ class WhatsAppInstance extends Model<WhatsAppInstanceAttributes, WhatsAppInstanc
 WhatsAppInstance.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     userId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'users',

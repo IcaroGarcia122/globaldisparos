@@ -1,0 +1,55 @@
+import React, { ReactNode } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertCircle } from 'lucide-react';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends React.Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback || (
+          <Card className="border-red-200 bg-red-50">
+            <CardHeader className="bg-red-100">
+              <CardTitle className="flex items-center gap-2 text-red-900">
+                <AlertCircle size={20} />
+                Erro ao Carregar Componente
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <p className="text-red-800 text-sm">
+                {this.state.error?.message || 'Erro desconhecido'}
+              </p>
+              <p className="text-red-700 text-xs mt-2">
+                Tente recarregar a página ou verifique se o backend está rodando.
+              </p>
+            </CardContent>
+          </Card>
+        )
+      );
+    }
+
+    return this.props.children;
+  }
+}

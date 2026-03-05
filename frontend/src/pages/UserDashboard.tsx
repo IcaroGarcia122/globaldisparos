@@ -3,7 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import HelpCenterTab from '@/components/HelpCenterTab';
 import ConnectWhatsApp from '@/components/ConnectWhatsAPP';
 import CreateInstance from '@/components/CreateInstance';
-import CampaignDispatcher from '@/components/CampaignDispatcher';
+import EliteDispatcher from '@/components/EliteDispatcher';
+import GroupToXlsxExporter from '@/components/GroupToXlsxExporter';
+import GroupManager from '@/components/GroupManager';
+import WarmupCloud from '@/components/WarmupCloud';
+import GoalsTracker from '@/components/GoalsTracker';
+import InstanceManager from './InstanceManager';
 import { fetchAPI } from '@/config/api';
 import { useBackendAuth } from '@/hooks/useBackendAuth';
 import {
@@ -13,7 +18,7 @@ import {
   HelpCircle, BookOpen, Headphones, MessageCircle, Smartphone, ShieldCheck, ChevronUp
 } from 'lucide-react';
 
-type Tab = 'dashboard' | 'disparo' | 'contatos' | 'logs' | 'grupos' | 'aquecimento' | 'conquistas' | 'plano' | 'ajuda';
+type Tab = 'dashboard' | 'instancias' | 'disparo' | 'contatos' | 'logs' | 'grupos' | 'aquecimento' | 'conquistas' | 'plano' | 'ajuda';
 
 const UserDashboard: React.FC = () => {
   const { isAuthenticated, loading: authLoading } = useBackendAuth();
@@ -22,25 +27,57 @@ const UserDashboard: React.FC = () => {
   const [disparoStep, setDisparoStep] = useState(1);
   const [userName, setUserName] = useState('Usuário');
   const [userEmail, setUserEmail] = useState('--');
-  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [instances, setInstances] = useState<any[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
+  const [deletingInstanceId, setDeletingInstanceId] = useState<string | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showCreateInstanceModal, setShowCreateInstanceModal] = useState(false);
+  const [selectedInstanceIndex, setSelectedInstanceIndex] = useState(0);
   const [contactLists, setContactLists] = useState<any[]>([]);
   const [showNewListModal, setShowNewListModal] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [totalMessagesSent, setTotalMessagesSent] = useState(0);
+  const [showInstanceSuccessMessage, setShowInstanceSuccessMessage] = useState(false);
 
   // Carregar instâncias do usuário
   const reloadInstances = async () => {
     setLoadingInstances(true);
     try {
-      const data = await fetchAPI('/instances');
-      setInstances(data);
+      console.log('🔄 Carregando instâncias...');
+      const response = await fetchAPI('/instances');
+      // API retorna {data: [...], pagination: {...}} ou {instances: [...], pagination: {...}}
+      const data = response?.data || response?.instances || response || [];
+      console.log(`✅ ${data.length} instância(s) carregada(s):`, data);
+      setInstances(Array.isArray(data) ? data : []);
+      if (data.length > 0) {
+        setSelectedInstanceIndex(0);
+      }
     } catch (error) {
-      console.error('Erro ao carregar instâncias:', error);
+      console.error('❌ Erro ao carregar instâncias:', error);
     } finally {
       setLoadingInstances(false);
+    }
+  };
+
+  // Deletar instância
+  const deleteInstance = async (instanceId: string) => {
+    setDeletingInstanceId(instanceId);
+    try {
+      console.log(`🗑️ Deletando instância ${instanceId}...`);
+      const response = await fetchAPI(`/instances/${instanceId}`, {
+        method: 'DELETE'
+      });
+      console.log(`✅ Instância ${instanceId} deletada:`, response);
+      // Aguarda um pouco para mostrar feedback
+      await new Promise(resolve => setTimeout(resolve, 500));
+      // Recarrega a lista
+      await reloadInstances();
+    } catch (error: any) {
+      console.error('❌ Erro ao deletar instância:', error);
+      alert(`Erro ao deletar instância: ${error.message || 'Tente novamente.'}`);
+    } finally {
+      setDeletingInstanceId(null);
     }
   };
 
@@ -87,9 +124,25 @@ const UserDashboard: React.FC = () => {
   useEffect(() => {
     // Só carrega instâncias após auth estar pronto e se está autenticado
     if (!authLoading && isAuthenticated) {
-      reloadInstances();
-      reloadContactLists();
-      loadDisparoStats();
+      // Validar limite de plano primeiro
+      const validateAndLoad = async () => {
+        try {
+          const validation = await fetchAPI('/instances/cleanup/validate-plan-limit', {
+            method: 'POST'
+          });
+          if (validation.cleaned > 0) {
+            console.log(`🧹 ${validation.cleaned} instâncias excedentes limpas`);
+          }
+        } catch (error) {
+          console.warn('⚠️ Erro na validação (não crítico):', error);
+        }
+        // Então carregar instâncias
+        await reloadInstances();
+        reloadContactLists();
+        loadDisparoStats();
+      };
+      
+      validateAndLoad();
     }
   }, [authLoading, isAuthenticated]);
 
@@ -108,6 +161,7 @@ const UserDashboard: React.FC = () => {
 
   const sidebarItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Painel Geral', icon: <LayoutGrid size={18} /> },
+    { id: 'instancias', label: 'Instâncias WhatsApp', icon: <Smartphone size={18} /> },
     { id: 'disparo', label: 'Disparador Elite', icon: <Send size={18} /> },
     { id: 'contatos', label: 'Listas de Contatos', icon: <Users size={18} /> },
     { id: 'logs', label: 'Logs de Atividade', icon: <Clock size={18} /> },
@@ -147,9 +201,29 @@ const UserDashboard: React.FC = () => {
               </div>
             </header>
 
+            {/* Success Message */}
+            {showInstanceSuccessMessage && (
+              <div className="mb-6 p-4 bg-emerald-500/20 border border-emerald-500/50 rounded-xl flex items-start gap-4">
+                <CheckCircle2 size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="text-sm font-black text-emerald-400 mb-1">Instância criada com sucesso! 🎉</h3>
+                  <p className="text-xs text-slate-300 mb-3">Acesse a seção de <span className="font-black">Instâncias</span> para conectar seu WhatsApp e começar a usar todas as funcionalidades.</p>
+                  <button
+                    onClick={() => {
+                      setActiveTab('instancias');
+                      setShowInstanceSuccessMessage(false);
+                    }}
+                    className="text-xs font-black text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                  >
+                    Ir para Instâncias <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {showConnectModal && (
               <div className="dashboard-card">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-black text-white uppercase">Gerenciar Conexões WhatsApp</h2>
                   <button
                     onClick={() => setShowConnectModal(false)}
@@ -166,11 +240,148 @@ const UserDashboard: React.FC = () => {
                   }} />
                 ) : (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {instances.map((instance) => (
-                        <ConnectWhatsApp key={instance.id} instanceId={instance.id} onConnected={() => reloadInstances()} />
-                      ))}
-                    </div>
+                    {/* Instância Principal Selecionada */}
+                    {instances[selectedInstanceIndex] && (
+                      <>
+                        <div>
+                          <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                            Instância Ativa ({selectedInstanceIndex + 1}/{instances.length})
+                          </label>
+                          <div className="flex items-center gap-3">
+                            <select
+                              value={instances[selectedInstanceIndex]?.id || ''}
+                              onChange={(e) => {
+                                const idx = instances.findIndex(i => i.id === e.target.value);
+                                if (idx !== -1) setSelectedInstanceIndex(idx);
+                              }}
+                              className="flex-1 bg-[#1c2433] border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-brand-500 transition-all"
+                            >
+                              {instances.map((instance) => (
+                                <option key={instance.id} value={instance.id}>
+                                  {instance.name} - {instance.status === 'connected' ? '✅' : '⏳'}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => {
+                                const instanceId = instances[selectedInstanceIndex]?.id;
+                                const instanceName = instances[selectedInstanceIndex]?.name;
+                                if (!instanceId) return;
+                                if (confirm(`Tem certeza que deseja remover "${instanceName}"?`)) {
+                                  deleteInstance(instanceId);
+                                  const newIdx = Math.max(0, selectedInstanceIndex - 1);
+                                  setSelectedInstanceIndex(newIdx);
+                                }
+                              }}
+                              disabled={deletingInstanceId === instances[selectedInstanceIndex]?.id}
+                              className="bg-rose-600/20 hover:bg-rose-600/30 disabled:opacity-50 disabled:cursor-not-allowed text-rose-500 border border-rose-500/30 px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2"
+                            >
+                              {deletingInstanceId === instances[selectedInstanceIndex]?.id ? (
+                                <>
+                                  <span className="animate-spin">⏳</span>
+                                  Removendo...
+                                </>
+                              ) : (
+                                <>
+                                  🗑️ Remover
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Card de Conexão */}
+                        <div className="bg-[#1c2433] border border-white/5 p-6 rounded-2xl">
+                          <ConnectWhatsApp instanceId={instances[selectedInstanceIndex]?.id} onConnected={() => reloadInstances()} />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Seção para Adicionar Nova Instância */}
+                    {instances.length < 10 && (
+                      showCreateInstanceModal ? (
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-xl">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-black text-white uppercase">Nova Instância ({instances.length}/10)</h3>
+                            <button
+                              onClick={() => setShowCreateInstanceModal(false)}
+                              className="text-slate-500 hover:text-white transition-colors"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+                          <CreateInstance onSuccess={() => {
+                            reloadInstances();
+                            setShowCreateInstanceModal(false);
+                            setShowInstanceSuccessMessage(true);
+                            setTimeout(() => setShowInstanceSuccessMessage(false), 5000);
+                          }} />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowCreateInstanceModal(true)}
+                          className="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-500 border border-emerald-500/30 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus size={16} />
+                          Adicionar Nova Instância ({instances.length}/3)
+                        </button>
+                      )
+                    )}
+
+                    {instances.length > 1 && (
+                      <div className="space-y-3 pt-4 border-t border-white/10">
+                        <p className="text-xs text-slate-500 uppercase font-black tracking-widest">
+                          Outras Instâncias ({instances.length - 1})
+                        </p>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {instances.map((instance, idx) => {
+                            if (idx === selectedInstanceIndex) return null;
+                            return (
+                              <div 
+                                key={instance.id}
+                                onClick={() => setSelectedInstanceIndex(idx)}
+                                className="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/10 hover:border-brand-500/30 cursor-pointer transition-all hover:bg-white/10"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold text-white truncate">{instance.name}</p>
+                                  <p className="text-xs text-slate-500 truncate">{instance.phoneNumber || 'Não conectado'}</p>
+                                </div>
+                                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                                  <span className={`text-xs font-black px-2 py-1 rounded whitespace-nowrap ${
+                                    instance.status === 'connected' 
+                                      ? 'bg-emerald-500/20 text-emerald-500' 
+                                      : 'bg-slate-500/20 text-slate-500'
+                                  }`}>
+                                    {instance.status === 'connected' ? '✅' : '⏳'}
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Tem certeza que deseja remover "${instance.name}"?`)) {
+                                        deleteInstance(instance.id);
+                                        if (idx < selectedInstanceIndex) {
+                                          setSelectedInstanceIndex(selectedInstanceIndex - 1);
+                                        }
+                                      }
+                                    }}
+                                    disabled={deletingInstanceId === instance.id}
+                                    className="bg-rose-600/20 hover:bg-rose-600/30 disabled:opacity-50 disabled:cursor-not-allowed text-rose-500 border border-rose-500/30 p-2 rounded transition-all flex-shrink-0 flex items-center justify-center"
+                                    title="Remover instância"
+                                  >
+                                    {deletingInstanceId === instance.id ? (
+                                      <span className="animate-spin">⏳</span>
+                                    ) : (
+                                      <X size={16} />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       onClick={() => setShowConnectModal(false)}
                       className="w-full py-2 text-slate-400 hover:text-white text-xs uppercase font-black tracking-widest transition-colors"
@@ -185,16 +396,6 @@ const UserDashboard: React.FC = () => {
             {!showConnectModal && instances.length === 0 && (
               <div className="dashboard-card">
                 <CreateInstance onSuccess={() => reloadInstances()} />
-              </div>
-            )}
-
-            {!showConnectModal && instances.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {instances.map((instance) => (
-                  <div key={instance.id}>
-                    <ConnectWhatsApp instanceId={instance.id} />
-                  </div>
-                ))}
               </div>
             )}
 
@@ -236,84 +437,14 @@ const UserDashboard: React.FC = () => {
           </div>
         );
 
+      case 'instancias':
+        return <InstanceManager />;
+
       case 'disparo':
-        return <CampaignDispatcher />;
+        return <EliteDispatcher />;
 
       case 'contatos':
-        return (
-          <div className="animate-fade-in space-y-10">
-            <header className="dashboard-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div>
-                <span className="bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase px-3 py-1 rounded-md mb-3 inline-block tracking-widest">Gestão</span>
-                <h1 className="text-2xl md:text-3xl font-black text-white italic uppercase tracking-tighter">Listas de Contatos</h1>
-                <p className="text-slate-500 text-sm mt-1">Crie listas segmentadas com variáveis personalizadas.</p>
-              </div>
-              <button onClick={() => setShowNewListModal(true)} className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 md:px-10 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-4 shadow-2xl shadow-emerald-500/20 active:scale-95">
-                <Plus size={18} />
-                Nova Lista
-              </button>
-            </header>
-
-            {showNewListModal && (
-              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-                <div className="bg-[#1c2433] border border-white/5 rounded-2xl p-8 max-w-md w-full">
-                  <h2 className="text-xl font-black text-white uppercase mb-4">Criar Nova Lista</h2>
-                  <input
-                    type="text"
-                    value={newListName}
-                    onChange={(e) => setNewListName(e.target.value)}
-                    placeholder="Nome da lista..."
-                    className="w-full bg-[#060b16] border border-white/5 rounded-xl px-4 py-3 text-white text-sm font-medium focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-700 mb-4"
-                    onKeyPress={(e) => e.key === 'Enter' && createNewList()}
-                  />
-                  <div className="flex gap-3">
-                    <button
-                      onClick={createNewList}
-                      className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                      Criar
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowNewListModal(false);
-                        setNewListName('');
-                      }}
-                      className="flex-1 bg-white/5 hover:bg-white/10 text-slate-400 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {contactLists.length === 0 ? (
-              <div className="py-32 md:py-40 flex flex-col items-center justify-center gap-6 opacity-30">
-                <Users size={80} className="text-slate-600" strokeWidth={1} />
-                <span className="text-xs font-black uppercase tracking-[0.4em] text-slate-600 italic">Nenhuma lista criada ainda.</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {contactLists.map((list: any) => (
-                  <div key={list.id} className="dashboard-card">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-black text-white uppercase">{list.name}</h3>
-                        <p className="text-slate-500 text-sm mt-1">{list.count || 0} contatos</p>
-                      </div>
-                      <button className="text-red-500 hover:text-red-400 transition-colors">
-                        <X size={20} />
-                      </button>
-                    </div>
-                    <button className="w-full py-2 px-4 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-black uppercase transition-all">
-                      Editar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
+        return <GroupToXlsxExporter />;
 
       case 'logs':
         return (
@@ -337,271 +468,13 @@ const UserDashboard: React.FC = () => {
         );
 
       case 'grupos':
-        return (
-          <div className="animate-fade-in space-y-8">
-            <header className="dashboard-card">
-              <span className="bg-brand-500/10 text-brand-500 text-[9px] font-black uppercase px-3 py-1 rounded-md mb-3 inline-block tracking-widest">Gestão de Grupos</span>
-              <h1 className="text-2xl md:text-3xl font-black text-white italic uppercase tracking-tighter">Adição em Massa</h1>
-              <p className="text-slate-500 text-sm mt-1">Adicione membros de uma planilha automaticamente aos seus grupos.</p>
-            </header>
-
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-              <div className="dashboard-card space-y-10 md:space-y-12">
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">1. Selecionar WhatsApp</label>
-                  <div className="bg-white/5 p-5 md:p-6 rounded-2xl border border-white/10 flex items-center gap-4 cursor-pointer hover:border-brand-500/30 transition-all">
-                    <div className="w-10 h-10 rounded-xl bg-[#0d1117] border border-white/10 flex items-center justify-center">
-                      <MessageSquare size={16} className="text-slate-600" />
-                    </div>
-                    <span className="text-sm font-bold text-white">Nenhuma Instância</span>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">2. Modo de Operação</label>
-                  <button className="w-full py-4 rounded-xl border border-white/10 bg-white/5 text-slate-500 font-black text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all">Grupo Existente</button>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">3. Upload Planilha</label>
-                  <div className="border-2 border-dashed border-white/10 rounded-[2rem] p-10 md:p-12 flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white/5 transition-all text-slate-500 hover:text-white group">
-                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Upload size={20} />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Selecionar XLSX</span>
-                  </div>
-                </div>
-
-                <button className="w-full py-5 rounded-2xl bg-white/5 text-slate-700 font-black text-[11px] uppercase tracking-[0.3em] cursor-not-allowed border border-white/5">
-                  Iniciar Adição
-                </button>
-              </div>
-
-              <div className="lg:col-span-3 dashboard-card flex flex-col items-center justify-center gap-8 relative overflow-hidden min-h-[400px]">
-                <div className="absolute top-8 md:top-10 left-8 md:left-10 right-8 md:right-10 flex items-center gap-4">
-                  <div className="relative flex-1">
-                    <input type="text" placeholder="Filtrar grupos existentes..." className="w-full bg-[#0d1117] border border-white/5 rounded-2xl px-12 md:px-14 py-4 text-sm font-medium outline-none focus:border-brand-500/40 transition-all" />
-                    <Search size={16} className="text-slate-600 absolute left-5 md:left-6 top-1/2 -translate-y-1/2" />
-                  </div>
-                  <button className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500 transition-all cursor-not-allowed shrink-0">
-                    <RefreshCw size={18} />
-                  </button>
-                </div>
-                <div className="flex flex-col items-center gap-6 opacity-40 mt-16">
-                  <Users size={80} className="text-slate-600" strokeWidth={1} />
-                  <span className="text-xs font-black uppercase tracking-[0.4em] text-slate-600 italic">Nenhum Grupo Encontrado...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
+        return <GroupManager />;
 
       case 'aquecimento':
-        return (
-          <div className="animate-fade-in space-y-10">
-            <header className="dashboard-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
-              <div className="relative z-10">
-                <span className="bg-brand-500/10 text-brand-500 text-[10px] font-black uppercase px-3 py-1 rounded-md mb-3 inline-block tracking-widest">Maturação</span>
-                <h1 className="text-2xl md:text-3xl font-black text-white italic uppercase tracking-tighter">Aquecimento Cloud</h1>
-                <p className="text-slate-500 text-sm mt-1 font-medium">Aumente a autoridade do seu chip de forma 100% automática.</p>
-              </div>
-              <button className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 md:px-10 py-4 md:py-5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-3 shadow-2xl shadow-emerald-500/20 active:scale-95">
-                <Play size={16} />
-                Iniciar Maturação Cloud
-              </button>
-            </header>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-8">
-                <div className="dashboard-card relative overflow-visible">
-                  <div className="flex flex-col md:flex-row items-center gap-10 md:gap-16">
-                    <div className="circle-progress-container">
-                      <svg width="200" height="200" className="circle-progress-svg">
-                        <circle cx="100" cy="100" r="85" fill="transparent" stroke="rgba(255,255,255,0.03)" strokeWidth="14" />
-                        <circle cx="100" cy="100" r="85" fill="transparent" stroke="#10b981" strokeWidth="14" strokeDasharray="534" strokeDashoffset="534" strokeLinecap="round" className="glow-green transition-all duration-1000" />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                        <span className="text-5xl md:text-6xl font-black text-white italic tracking-tighter leading-none">0%</span>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Maturidade</span>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 w-full">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
-                        <h3 className="text-lg md:text-xl font-black text-white italic uppercase tracking-tighter">Índice de Maturação</h3>
-                        <div className="bg-white/5 px-4 py-1 rounded-full border border-white/5 flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Sistema Standby</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mb-6">
-                        <Flame size={14} className="text-orange-500" />
-                        <span className="text-slate-500 font-black italic uppercase text-[10px]">Aguardando Início...</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3 md:gap-4">
-                        {[
-                          { label: 'TOTAL INTERAÇÕES', val: '0' },
-                          { label: 'TEMPO DE UPTIME', val: '00:00:00' },
-                          { label: 'DELAY MÉDIO', val: '--' }
-                        ].map((s, i) => (
-                          <div key={i} className="bg-white/5 p-3 md:p-4 rounded-2xl border border-white/5 text-center">
-                            <div className="text-[7px] md:text-[8px] font-black text-slate-500 uppercase mb-1 tracking-widest">{s.label}</div>
-                            <div className="text-lg font-black text-white italic">{s.val}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Velocidade do Motor + Modo & Instâncias */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="dashboard-card">
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500 border border-brand-500/20">
-                        <Zap size={18} />
-                      </div>
-                      <h3 className="text-base font-black text-white italic uppercase tracking-tighter">Velocidade do Motor</h3>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { name: 'Humano', delay: '30-60 seg' },
-                        { name: 'Veloz', delay: '15-30 seg' },
-                        { name: 'Turbo Elite', delay: '5-15 seg' },
-                        { name: 'Caótico', delay: 'Aleatório' }
-                      ].map((v, i) => (
-                        <button key={i} className={`p-4 rounded-2xl border transition-all text-center hover:scale-105 ${i === 1 ? 'bg-brand-500/10 border-brand-500/40' : 'bg-white/5 border-white/5 hover:border-white/20'}`}>
-                          <div className={`text-xs font-black italic uppercase ${i === 1 ? 'text-white' : 'text-slate-400'}`}>{v.name}</div>
-                          <div className="text-[8px] text-slate-600 font-bold uppercase mt-1">{v.delay}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="dashboard-card">
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
-                        <CheckCircle2 size={18} />
-                      </div>
-                      <h3 className="text-base font-black text-white italic uppercase tracking-tighter">Modo & Instâncias</h3>
-                    </div>
-                    <div className="bg-white/5 p-2 rounded-xl border border-white/5 flex mb-6">
-                      <button className="flex-1 py-3 bg-emerald-500 text-white font-black text-[10px] uppercase rounded-lg shadow-xl shadow-emerald-500/10">Modo Solo</button>
-                      <button className="flex-1 py-3 text-slate-500 font-black text-[10px] uppercase hover:text-white transition-colors">Ping Pong</button>
-                    </div>
-                    <div className="space-y-3">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Instância Principal</label>
-                      <div className="relative">
-                        <select className="w-full bg-[#0d1117] border border-white/10 rounded-xl px-5 py-3 text-white text-xs font-bold appearance-none outline-none focus:border-brand-500 transition-all">
-                          <option>Nenhuma conectada</option>
-                        </select>
-                        <ChevronDown size={14} className="text-slate-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="dashboard-card flex flex-col h-full relative overflow-hidden">
-                <div className="flex items-center justify-between mb-10">
-                  <h3 className="text-lg font-black text-white italic uppercase tracking-tighter">Monitoramento Realtime</h3>
-                  <span className="text-[9px] font-bold text-brand-500 uppercase tracking-widest animate-pulse italic">Live</span>
-                </div>
-                <div className="flex-1 flex flex-col items-center justify-center gap-6 opacity-20">
-                  <Activity size={64} className="text-slate-600" strokeWidth={1} />
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-center">Nenhuma atividade registrada.</span>
-                </div>
-                <div className="mt-8 bg-brand-500/5 p-5 md:p-6 rounded-2xl border border-brand-500/10 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-500 shrink-0">
-                    <Shield size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black text-white uppercase tracking-widest">PROTEÇÃO ANTI-BAN</div>
-                    <p className="text-[9px] text-slate-500 font-medium">Variação inteligente de delay e simulação ativa.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
+        return <WarmupCloud />;
 
       case 'conquistas':
-        const plaques = [
-          { title: 'Placa de 10k', subtitle: 'Iniciante PRO', image: 'https://i.ibb.co/ym0R0PTf/Design-sem-nome-1.png', desc: 'Concedida ao atingir 10 mil disparos entregues.', color: 'border-slate-400/30', target: 10000 },
-          { title: 'Placa de 100k', subtitle: 'Expert Global', image: 'https://i.ibb.co/9HNDWPXS/Design-sem-nome.png', desc: 'Concedida ao atingir 100 mil disparos entregues.', color: 'border-brand-500/50 shadow-[0_0_30px_rgba(59,130,246,0.2)]', target: 100000 },
-          { title: 'Placa de 1 Milhão', subtitle: 'Lenda das Vendas', image: 'https://i.ibb.co/Xx2H9Z6v/Design-sem-nome-2.png', desc: 'O ápice da escala. Um milhão de mensagens enviadas.', color: 'border-brand-600 shadow-[0_0_40px_rgba(37,99,235,0.3)]', target: 1000000 }
-        ];
-        return (
-          <div className="animate-fade-in space-y-10">
-            <header className="dashboard-card">
-              <span className="bg-brand-500/10 text-brand-500 text-[10px] font-black uppercase px-3 py-1 rounded-md mb-3 inline-block tracking-widest">Recompensas</span>
-              <h1 className="text-2xl md:text-3xl font-black text-white italic uppercase tracking-tighter">Minhas Conquistas</h1>
-              <p className="text-slate-500 text-sm mt-1">Acompanhe seu progresso e desbloqueie placas físicas exclusivas.</p>
-            </header>
-
-            {/* Total de Disparos */}
-            <div className="dashboard-card">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-black text-white uppercase">Seus Disparos Totais</h3>
-                <span className="text-3xl font-black text-brand-500">{totalMessagesSent.toLocaleString()}</span>
-              </div>
-              <p className="text-slate-500 text-sm mb-6">Progresso geral de mensagens enviadas.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
-              {plaques.map((plaque, idx) => {
-                const percentage = Math.min((totalMessagesSent / plaque.target) * 100, 100);
-                const isUnlocked = totalMessagesSent >= plaque.target;
-
-                return (
-                  <div key={idx} className={`dashboard-card !p-4 border ${plaque.color} relative overflow-hidden group hover:scale-105 transition-transform duration-500`}>
-                    <div className="bg-[#1c2433] rounded-3xl p-5 md:p-6 h-full flex flex-col">
-                      <div className="aspect-square rounded-2xl overflow-hidden mb-6 relative">
-                        <img src={plaque.image} alt={plaque.title} className={`w-full h-full object-cover transition-all duration-700 ${isUnlocked ? 'filter-none opacity-100' : 'filter grayscale opacity-40 group-hover:grayscale-0 group-hover:opacity-100'}`} />
-                        {!isUnlocked && (
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center group-hover:bg-transparent transition-all">
-                            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 group-hover:hidden">
-                              <span className="text-[9px] font-black text-white uppercase tracking-widest">Bloqueado</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <h3 className="text-lg md:text-xl font-black text-white italic uppercase tracking-tighter mb-1">{plaque.title}</h3>
-                      <div className="text-brand-500 text-[9px] font-black uppercase tracking-widest mb-4">{plaque.subtitle}</div>
-                      <div className="flex-1 text-[11px] text-slate-500 font-medium leading-relaxed mb-4">
-                        {plaque.desc}
-                        <p className="mt-2 text-brand-400">Progresso: {totalMessagesSent.toLocaleString()} / {plaque.target.toLocaleString()}</p>
-                      </div>
-
-                      {/* Barra de Progressão */}
-                      <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden mb-4">
-                        <div
-                          className={`h-full ${isUnlocked ? 'bg-emerald-500' : 'bg-brand-500'} transition-all duration-1000`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-
-                      {/* Botão WhatsApp */}
-                      <a
-                        href={`https://wa.me/5542999538607?text=Olá! Meu progresso atual é ${totalMessagesSent.toLocaleString()} disparos. ${isUnlocked ? `Atingi o objetivo de ${plaque.target.toLocaleString()} e gostaria de receber a placa de ${plaque.title}!` : `Estou progredindo para a placa de ${plaque.target.toLocaleString()} disparos.`}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2 px-3 bg-green-600 hover:bg-green-500 text-white rounded-lg text-[9px] font-black uppercase transition-all flex items-center justify-center gap-2"
-                      >
-                        📱 Contato via WhatsApp
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="dashboard-card bg-brand-500/5 border border-brand-500/20">
-              <p className="text-sm text-slate-400 text-center italic">
-                💡 Chamar no WhatsApp ao lado e mandar uma print da sua progressão para receber a placa física no seu endereço!
-              </p>
-            </div>
-          </div>
-        );
+        return <GoalsTracker />;
 
       case 'plano':
         return (

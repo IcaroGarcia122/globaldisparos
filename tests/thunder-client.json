@@ -1,0 +1,103 @@
+{
+  "clientName": "Thunder Client",
+  "collectionName": "Evolution API - Local",
+  "collectionId": "evolution-local",
+  "dateExported": "2024-01-01",
+  "version": "1.0",
+  "folders": [],
+  "requests": [
+    {
+      "name": "1. Listar Instâncias",
+      "method": "GET",
+      "url": "http://localhost:8080/instance/fetchInstances",
+      "headers": [
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ]
+    },
+    {
+      "name": "2. Criar Instância",
+      "method": "POST",
+      "url": "http://localhost:8080/instance/create",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"instanceName\": \"teste_local\",\n  \"qrcode\": true\n}"
+      }
+    },
+    {
+      "name": "3. Conectar Instância",
+      "method": "GET",
+      "url": "http://localhost:8080/instance/connect/teste_local",
+      "headers": [
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ]
+    },
+    {
+      "name": "4. Buscar QR Code",
+      "method": "GET",
+      "url": "http://localhost:8080/instance/qrcode/teste_local",
+      "headers": [
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ]
+    },
+    {
+      "name": "5. Verificar Status",
+      "method": "GET",
+      "url": "http://localhost:8080/instance/connectionState/teste_local",
+      "headers": [
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ]
+    },
+    {
+      "name": "6. Enviar Mensagem",
+      "method": "POST",
+      "url": "http://localhost:8080/message/sendText/teste_local",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"number\": \"5511999999999\",\n  \"text\": \"Olá! Mensagem de teste.\"\n}"
+      }
+    },
+    {
+      "name": "7. Deletar Instância",
+      "method": "DELETE",
+      "url": "http://localhost:8080/instance/delete/teste_local",
+      "headers": [
+        {
+          "name": "apikey",
+          "value": "teste_local_key_123456789"
+        }
+      ]
+    }
+  ]
+}

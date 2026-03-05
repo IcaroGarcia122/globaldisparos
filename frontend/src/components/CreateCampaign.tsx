@@ -35,15 +35,14 @@ const CreateCampaign: React.FC = () => {
         method: 'POST'
       });
 
-      alert('Campanha iniciada com anti-ban ativo!');
+      // Abrir dashboard da campanha em tempo real
+      localStorage.setItem('activeCampaignId', String(campaign.id));
       
       // Limpar formulário
       setName('');
       setMessage('');
       setInstanceId('');
       setContactListId('');
-      
-      window.location.reload();
     } catch (error: any) {
       alert(error.message || 'Erro ao criar campanha');
     } finally {

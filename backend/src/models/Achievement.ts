@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface AchievementAttributes {
-  id: string;
-  userId: string;
+  id: number;
+  userId: number;
   type: 'messages_sent' | 'campaigns_completed' | 'contacts_imported' | 'groups_synced' | 'uptime_streak';
   title: string;
   description: string;
@@ -20,8 +20,8 @@ interface AchievementCreationAttributes
   extends Optional<AchievementAttributes, 'id' | 'currentValue' | 'isUnlocked' | 'unlockedAt'> {}
 
 class Achievement extends Model<AchievementAttributes, AchievementCreationAttributes> implements AchievementAttributes {
-  public id!: string;
-  public userId!: string;
+  public id!: number;
+  public userId!: number;
   public type!: 'messages_sent' | 'campaigns_completed' | 'contacts_imported' | 'groups_synced' | 'uptime_streak';
   public title!: string;
   public description!: string;
@@ -44,12 +44,12 @@ class Achievement extends Model<AchievementAttributes, AchievementCreationAttrib
 Achievement.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     userId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'users',

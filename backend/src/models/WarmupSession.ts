@@ -2,8 +2,8 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/database';
 
 interface WarmupSessionAttributes {
-  id: string;
-  instanceId: string;
+  id: number;
+  instanceId: number;
   status: 'active' | 'paused' | 'completed';
   targetDailyMessages: number;
   currentDailyMessages: number;
@@ -16,8 +16,8 @@ interface WarmupSessionAttributes {
 interface WarmupSessionCreationAttributes extends Optional<WarmupSessionAttributes, 'id' | 'status' | 'currentDailyMessages'> {}
 
 class WarmupSession extends Model<WarmupSessionAttributes, WarmupSessionCreationAttributes> implements WarmupSessionAttributes {
-  public id!: string;
-  public instanceId!: string;
+  public id!: number;
+  public instanceId!: number;
   public status!: 'active' | 'paused' | 'completed';
   public targetDailyMessages!: number;
   public currentDailyMessages!: number;
@@ -37,12 +37,12 @@ class WarmupSession extends Model<WarmupSessionAttributes, WarmupSessionCreation
 WarmupSession.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     instanceId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'whatsapp_instances',

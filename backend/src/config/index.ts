@@ -18,6 +18,8 @@ interface Config {
   jwt: {
     secret: string;
     expiresIn: string;
+    refreshSecret: string;
+    refreshExpiresIn: string;
   };
   diggion: {
     webhookSecret: string;
@@ -69,7 +71,9 @@ const config: Config = {
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'change_this_secret_key',
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    expiresIn: process.env.JWT_EXPIRES_IN || process.env.JWT_EXPIRY || '7d',
+    refreshSecret: process.env.JWT_REFRESH_SECRET || 'change-this-refresh-secret',
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || process.env.JWT_REFRESH_EXPIRY || '30d',
   },
   diggion: {
     webhookSecret: process.env.DIGGION_WEBHOOK_SECRET || '',
@@ -79,7 +83,7 @@ const config: Config = {
     email: process.env.ADMIN_EMAIL || 'admin@example.com',
     password: process.env.ADMIN_PASSWORD || 'Admin@123456',
   },
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:8080',
   authSessionsDir: process.env.AUTH_SESSIONS_DIR || path.join(process.cwd(), 'auth_sessions'),
   antiBan: {
     newAccountDays: parseInt(process.env.ANTI_BAN_NEW_ACCOUNT_DAYS || '7', 10),
